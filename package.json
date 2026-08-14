@@ -1,0 +1,10 @@
+{
+  "name": "fami-rent-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FAMI Rent Management",
+  "scripts": {
+    "start": "npx serve . -s -l 3000",
+    "dev": "npx http-server . -c-1 -p 3000"
+  }
+}
