@@ -9,25 +9,36 @@
 
   function el(tag, attrs={}, ...children){
     const e = document.createElement(tag);
-    for(const k in attrs){ if(k.startsWith('on') && typeof attrs[k] === 'function'){ e.addEventListener(k.slice(2), attrs[k]); } else if(k==='html'){ e.innerHTML = attrs[k]; } else { e.setAttribute(k, attrs[k]); }}
+    for(const k in attrs){
+      if(k.startsWith('on') && typeof attrs[k] === 'function'){ e.addEventListener(k.slice(2), attrs[k]); }
+      else if(k==='html'){ e.innerHTML = attrs[k]; }
+      else { e.setAttribute(k, attrs[k]); }
+    }
     children.forEach(c => { if(c==null) return; if(typeof c === 'string') e.appendChild(document.createTextNode(c)); else e.appendChild(c); });
     return e;
   }
 
   function waitForSupabase(timeout = 3000){
     return new Promise((resolve)=>{
-      if(window.supabase) return resolve(window.supabase);
+      if(window.supabase || window.db) return resolve(window.supabase || window.db);
       const start = Date.now();
       const iv = setInterval(()=>{
-        if(window.supabase){ clearInterval(iv); return resolve(window.supabase); }
-        if(Date.now() - start > timeout){ clearInterval(iv); return resolve(window.supabase || null); }
+        if(window.supabase || window.db){ clearInterval(iv); return resolve(window.supabase || window.db); }
+        if(Date.now() - start > timeout){ clearInterval(iv); return resolve(window.supabase || window.db || null); }
       }, 100);
     });
   }
 
+  function getClient(){
+    if(window.db && typeof window.db.getClient === 'function') return window.db.getClient();
+    if(window.db) return window.db;
+    if(window.supabase) return window.supabase;
+    return null;
+  }
+
   const supabase = await waitForSupabase(3000);
   if(!supabase){
-    console.warn('Supabase not ready after wait; app will still try to use window.supabase when available.');
+    console.warn('Supabase not ready after wait; app will still try to use window.db/window.supabase when available.');
   }
 
   function nav(){
@@ -40,8 +51,8 @@
 
   async function fetchShops(){
     try{
-      const client = window.supabase;
-      if(!client) throw new Error('supabase not available');
+      const client = getClient();
+      if(!client) throw new Error('supabase/db client not available');
       const res = await client.from('shops').select();
       if(res.error) throw res.error;
       return res.data || [];
@@ -50,8 +61,8 @@
 
   async function fetchPayments(shop_id){
     try{
-      const client = window.supabase;
-      if(!client) throw new Error('supabase not available');
+      const client = getClient();
+      if(!client) throw new Error('supabase/db client not available');
       const res = await client.from('payments').select();
       if(res.error) throw res.error;
       return (res.data || []).filter(p => String(p.shop_id) === String(shop_id));
@@ -60,7 +71,7 @@
 
   async function addShop(data){
     try{
-      const client = window.supabase;
+      const client = getClient();
       const res = await client.from('shops').insert(data);
       if(res.error) throw res.error;
       window.logger && window.logger.info('shop added', res.data);
@@ -70,7 +81,7 @@
 
   async function updateShop(id, changes){
     try{
-      const client = window.supabase;
+      const client = getClient();
       const res = await client.from('shops').update(changes).eq('id', id);
       if(res.error) throw res.error;
       window.logger && window.logger.info('shop updated', res.data);
@@ -80,7 +91,7 @@
 
   async function deleteShop(id){
     try{
-      const client = window.supabase;
+      const client = getClient();
       const res = await client.from('shops').delete().eq('id', id);
       if(res.error) throw res.error;
       window.logger && window.logger.info('shop deleted', id);
@@ -90,7 +101,7 @@
 
   async function addPayment(data){
     try{
-      const client = window.supabase;
+      const client = getClient();
       const res = await client.from('payments').insert(data);
       if(res.error) throw res.error;
       window.logger && window.logger.info('payment added', res.data);
@@ -100,7 +111,7 @@
 
   function renderShopsList(shops){
     const list = el('div',{class:'shops-list'});
-    if(!shops.length) list.appendChild(el('p',{}, 'No shops yet.')); 
+    if(!shops.length) list.appendChild(el('p',{}, 'No shops yet.'));
     shops.forEach(s => {
       const item = el('div',{class:'shop-item'},
         el('a',{href:'#/shop/'+s.id, class:'shop-name'}, s.name + (s.occupied? ' (occupied)':' (vacant)')),
