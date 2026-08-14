@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FAMI — Add Shop</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/src/runtime-shims.js" defer></script>
+  <script src="/src/supabase-client.js" defer></script>
+  <script src="/src/db-wrapper.js" defer></script>
+</head>
+<body>
+  <nav><a href="/shops.html">Shops</a> | <a href="/login.html">Home</a></nav>
+  <main>
+    <h1>Add Shop</h1>
+    <form id="form">
+      <label>Name: <input name="name" required></label><br>
+      <label>Rent: <input name="rent" type="number" value="0"></label><br>
+      <label>Occupied: <input name="occupied" type="checkbox"></label><br>
+      <button type="submit">Add Shop</button>
+    </form>
+  </main>
+  <script>
+    (function(){
+      function readDemo(){ try{ return JSON.parse(localStorage.getItem('FAMI_DEMO_DATA')||'{"shops":[],"payments":[]}'); }catch(e){return {shops:[],payments:[]};} }
+      function writeDemo(data){ localStorage.setItem('FAMI_DEMO_DATA', JSON.stringify(data)); }
+      document.getElementById('form').addEventListener('submit', async function(e){
+        e.preventDefault(); const f = e.target;
+        const name = f.name.value.trim(); const rent = Number(f.rent.value)||0; const occupied = f.occupied.checked;
+        if(!name) return alert('Provide name');
+        const newShop = { id: 's_'+Date.now(), name, rent, occupied };
+        // try db
+        try{ const client = window.db || window.supabase; if(client && client.from){ await client.from('shops').insert(newShop); } }catch(e){console.warn(e)}
+        const data = readDemo(); data.shops = (data.shops||[]).concat(newShop); writeDemo(data);
+        window.location.href = '/shops.html';
+      });
+    })();
+  </script>
+</body>
+</html>

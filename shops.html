@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FAMI — Shops</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/src/runtime-shims.js" defer></script>
+  <script src="/src/supabase-client.js" defer></script>
+  <script src="/src/db-wrapper.js" defer></script>
+</head>
+<body>
+  <nav><a href="/login.html">Home</a> | <a href="/add-shop.html">Add Shop</a> | <a href="/logs.html">Logs</a></nav>
+  <main>
+    <h1>Shops</h1>
+    <div id="shops"></div>
+  </main>
+  <script>
+    (async function(){
+      function readDemo(){
+        try{ return JSON.parse(localStorage.getItem('FAMI_DEMO_DATA')||'{"shops":[],"payments":[]}'); }catch(e){return {shops:[],payments:[]};}
+      }
+      function writeDemo(data){ localStorage.setItem('FAMI_DEMO_DATA', JSON.stringify(data)); }
+      async function fetchShops(){
+        try{
+          const client = window.db || window.supabase;
+          if(client){
+            const res = await (client.from ? client.from('shops').select() : Promise.resolve({data:[],error:null}));
+            if(res && res.data && res.data.length) return res.data;
+          }
+        }catch(e){console.warn(e)}
+        return readDemo().shops || [];
+      }
+      async function deleteShop(id){
+        try{
+          const client = window.db || window.supabase;
+          if(client && client.from){ await client.from('shops').delete().eq('id', id); }
+        }catch(e){console.warn(e)}
+        const data = readDemo(); data.shops = (data.shops||[]).filter(s=>String(s.id)!==String(id)); writeDemo(data);
+      }
+      function render(shops){
+        const container = document.getElementById('shops'); container.innerHTML='';
+        if(!shops.length) { container.textContent='No shops yet.'; return; }
+        shops.forEach(s=>{
+          const div = document.createElement('div'); div.className='shop-item';
+          const a = document.createElement('a'); a.href = '/shop.html?id='+encodeURIComponent(s.id); a.textContent = s.name + (s.occupied ? ' (occupied)' : ' (vacant)');
+          const edit = document.createElement('button'); edit.textContent='Edit'; edit.onclick = async ()=>{ const n=prompt('New name', s.name); if(n){
+            // update in demo
+            const data = readDemo(); data.shops = (data.shops||[]).map(x=> x.id===s.id? Object.assign({},x,{name:n}): x); writeDemo(data); load();
+            try{ const client = window.db || window.supabase; if(client && client.from) await client.from('shops').update({name:n}).eq('id', s.id); }catch(e){}
+          }}
+          const del = document.createElement('button'); del.textContent='Delete'; del.onclick = async ()=>{ if(confirm('Delete shop?')){ await deleteShop(s.id); load(); }}
+          div.appendChild(a); div.appendChild(document.createTextNode(' ')); div.appendChild(edit); div.appendChild(del);
+          container.appendChild(div);
+        });
+      }
+      async function load(){ const shops = await fetchShops(); render(shops); }
+      load();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FAMI — Logs</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/src/runtime-shims.js" defer></script>
+</head>
+<body>
+  <nav><a href="/login.html">Home</a> | <a href="/shops.html">Shops</a></nav>
+  <main>
+    <h1>Recent Logs</h1>
+    <div id="logs"></div>
+  </main>
+  <script>
+    (function(){
+      function render(){ const buf = (window.logger && window.logger.getBuffer && window.logger.getBuffer()) || []; const el = document.getElementById('logs'); el.innerHTML=''; buf.slice().reverse().forEach(entry=>{ const d = document.createElement('div'); d.textContent = `[${entry.time}] ${entry.level.toUpperCase()}: ${entry.message}`; el.appendChild(d); }); }
+      render();
+    })();
+  </script>
+</body>
+</html>
