@@ -3,22 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>FAMI Rent Management</title>
-  <!-- Runtime shims (logger + socket) must load before supabase-client -->
-  <script src="/src/runtime-shims.js" defer></script>
-  <script src="/src/supabase-client.js" defer></script>
-  <script src="/src/db-wrapper.js" defer></script>
-  <script>
-    // Optional: set these in Vercel Environment Variables to enable real DB
-    // window.SUPABASE_URL = '';
-    // window.SUPABASE_ANON_KEY = '';
-  </script>
-  <meta name="description" content="FAMI Rent Management">
-  <link rel="stylesheet" href="/styles.css">
+  <title>FAMI Rent Management — Redirecting</title>
+  <meta http-equiv="refresh" content="0; url=/login.html">
+  <script>window.location.href = '/login.html';</script>
 </head>
 <body>
-  <!-- original app content follows (kept as-is) -->
-  <div id="app"></div>
-  <script src="/app.js"></script>
+  Redirecting to <a href="/login.html">login</a>...
 </body>
 </html>
