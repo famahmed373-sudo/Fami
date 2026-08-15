@@ -11,9 +11,8 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.45.0
         version: 2.112.3
-    devDependencies:
       vite:
-        specifier: ^5.4.10
+        specifier: ^5.4.21
         version: 5.4.21
 
 packages:
