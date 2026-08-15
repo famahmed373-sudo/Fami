@@ -1,9 +1,0 @@
-body { font-family: Arial, sans-serif; margin: 16px; background:#fafafa; color:#222; }
-nav a { text-decoration:none; color:#0366d6; margin-right:12px; }
-.shops-list { margin-top:12px; }
-.shop-item { border:1px solid #ddd; padding:8px; margin-bottom:8px; background:#fff; display:flex; justify-content:space-between; align-items:center; }
-.shop-name { font-weight:600; color:#111; text-decoration:none; }
-.form input { margin:4px 0; padding:6px; width:200px; }
-.form button { margin-top:8px; padding:6px 10px; }
-.payment-item { border-bottom:1px dashed #eee; padding:6px 0; }
-.log-entry { font-family: monospace; font-size: 13px; padding:4px 0; border-bottom:1px solid #f0f0f0; }

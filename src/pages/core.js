@@ -168,8 +168,15 @@ export function renderShops(ctx) {
           el('option', { value: 'vacant' }, 'Vacant')
         )
       ),
-      can('edit') ? el('button', { class: 'btn primary', onclick: () => shopModal(ctx, null) }, el('span', { class: 'ic', html: iconSvg('plus', 15) }), 'Register shop') : null
+      can('edit')
+        ? el('button', { class: 'btn primary', onclick: () => shopModal(ctx, null) }, el('span', { class: 'ic', html: iconSvg('plus', 15) }), 'Register shop')
+        : el('button', { class: 'btn primary', disabled: true, title: 'Requires Manager or Admin role', onclick: () => toast('Your role is read-only. Ask an admin to upgrade you to Manager or Admin.', 'info') },
+            el('span', { class: 'ic', html: iconSvg('plus', 15) }), 'Register shop')
     ),
+    !can('edit') ? el('div', { class: 'demoBanner', style: { marginTop: 0 } },
+      el('span', { html: iconSvg('info', 17) }),
+      el('span', {}, el('b', {}, 'Read-only mode — '), 'your account is a Viewer. Ask the building admin to change your role to Manager or Admin in Users & Roles to register and edit shops.')
+    ) : null,
     grid
   );
   renderGrid();
