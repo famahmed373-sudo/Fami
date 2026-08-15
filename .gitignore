@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+
+# local environment (secrets are managed via the platform Keys tab)
+.env
+.env.local
+.env.*.local

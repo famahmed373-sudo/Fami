@@ -1,22 +1,28 @@
-# Setup instructions for Vercel deployment and local testing
+# Setup for deployment (Supabase-backed)
 
-1. Include the initializer and shims in your index.html HEAD (before main app JS):
+The app is a plain Vite project: `index.html` → `src/app.js` → `src/api.js` (real Supabase client or demo mock).
 
-<script src="/src/supabase-client.js" defer></script>
-<script src="/src/runtime-shims.js" defer></script>
+## 1. Create the backend
 
-2. Optional: configure environment variables in Vercel when you want to use a real Supabase project:
+In your Supabase project, open the SQL editor and run the whole file `supabase/schema.sql`.
+It is idempotent — re-running is safe. It creates:
 
-- SUPABASE_URL
-- SUPABASE_ANON_KEY
+- All tables (profiles, shops, payments, expenses, expense_budgets, savings_goals, savings_deposits, notifications, activity)
+- Row Level Security (building data shared by all authenticated staff; notifications and profiles per-user)
+- `notify_staff()` and `set_user_role()` RPC helpers used by the app
+- Realtime publications for live cross-session updates
 
-If these are not set, the app runs in DEMO/MOCK mode using localStorage.
+## 2. Configure environment variables
 
-3. Local testing:
-- Install a static server: npm i -g serve
-- Run: npx serve . -s -l 3000
-- Open http://localhost:3000 and check DevTools Console. You should see a DEMO/MOCK mode warning and no uncaught exceptions.
+Set these for the deployed app:
 
-4. If your app expects direct imports of supabase-js in many files, centralize DB calls through window.supabase or adapt those files to import from src/supabase-client.js.
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
 
-5. Troubleshooting: If console shows missing methods (e.g., "single()" or "limit()"), tell me the exact console error and I will extend the mock to implement those chainable methods.
+Without them the app runs in **Demo mode** (localStorage mock) and shows a demo banner.
+
+## 3. Build & deploy
+
+- Install: `pnpm install`
+- Dev: `pnpm dev`
+- Build: `pnpm build` → static output in `dist/`
