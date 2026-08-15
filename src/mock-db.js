@@ -261,6 +261,19 @@ export function createMockDb() {
         if (!s) return { data: null, error: { message: 'No session' } };
         const u = db.users.find((x) => x.id === s.user.id);
         if (u && fields.data) Object.assign(u, fields.data);
+        if (u && fields.password) u.password = fields.password;
+        saveDb(db);
+        return { data: { user: toUser(u) }, error: null };
+      },
+      resetPasswordForEmail: async () => {
+        await new Promise((r) => setTimeout(r, 40));
+        return { data: null, error: null };
+      },
+      updatePassword: async ({ password }) => {
+        const s = getSession();
+        if (!s) return { data: null, error: { message: 'No session' } };
+        const u = db.users.find((x) => x.id === s.user.id);
+        if (u && password) u.password = password;
         saveDb(db);
         return { data: { user: toUser(u) }, error: null };
       }

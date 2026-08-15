@@ -39,12 +39,57 @@ function boot() {
     FAMI.session = data.session;
     client.auth.onAuthStateChange((event, session) => {
       FAMI.session = session;
-      if (session) startApp();
+      if (session) { if (isRecoveryUrl()) showResetPassword(); else startApp(); }
       else showLogin();
     });
-    if (FAMI.session) startApp();
+    if (FAMI.session) { if (isRecoveryUrl()) showResetPassword(); else startApp(); }
     else showLogin();
   }).catch(() => showLogin());
+}
+
+// A password-reset email link lands on the app with type=recovery in the hash.
+const isRecoveryUrl = () => location.hash.includes('type=recovery');
+
+function showResetPassword() {
+  hideApp();
+  const root = document.getElementById('root');
+  root.replaceChildren(resetPasswordView());
+}
+
+function resetPasswordView() {
+  const pass = el('input', { type: 'password', placeholder: 'New password (min 6 characters)', autocomplete: 'new-password' });
+  const pass2 = el('input', { type: 'password', placeholder: 'Repeat new password', autocomplete: 'new-password' });
+  const msg = el('div', { class: 'muted', style: { minHeight: 20, marginTop: 12, fontSize: 13 } });
+  const submit = async () => {
+    const p = pass.value;
+    if (p.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; msg.style.color = 'var(--danger)'; return; }
+    if (p !== pass2.value) { msg.textContent = 'Passwords do not match.'; msg.style.color = 'var(--danger)'; return; }
+    try {
+      await api.updatePassword(p);
+      msg.style.color = 'var(--success)';
+      msg.textContent = 'Password updated — redirecting to your workspace...';
+      history.replaceState(null, '', '#dashboard');
+      setTimeout(() => location.reload(), 900);
+    } catch (e) {
+      msg.style.color = 'var(--danger)';
+      msg.textContent = e.message || 'Could not update password.';
+    }
+  };
+  return el('div', { class: 'auth' },
+    el('div', { class: 'authMain', style: { gridColumn: '1 / -1' } },
+      el('div', { class: 'authCard' },
+        el('div', { class: 'logo', style: { width: 46, height: 46 } }, el('span', { html: LOGO_SVG.replace('width="22" height="22"', 'width="26" height="26"') })),
+        el('h2', {}, 'Set a new password'),
+        el('p', {}, 'Choose a new password for your Fahmi account.'),
+        el('div', { class: 'formGrid' },
+          el('div', { class: 'field full' }, el('label', {}, 'New password'), pass),
+          el('div', { class: 'field full' }, el('label', {}, 'Confirm password'), pass2)
+        ),
+        el('button', { class: 'btn primary', style: { width: '100%', marginTop: 14, padding: 12 }, onclick: submit }, 'Update password'),
+        msg
+      )
+    )
+  );
 }
 
 // ---------- auth UI ----------
@@ -73,6 +118,41 @@ function loginView() {
     msg.textContent = '';
   } }, label);
   const tabs = el('div', { class: 'authTabs' }, tab('Sign in', 'login'), tab('Create account', 'signup'));
+  const recoverEmail = el('input', { type: 'email', placeholder: 'name@example.com', autocomplete: 'email' });
+  const recoverMsg = el('div', { class: 'muted', style: { minHeight: 20, marginTop: 12, fontSize: 13 } });
+  const recoverBox = el('div', { class: 'recoverBox hidden' },
+    el('p', { class: 'muted', style: { margin: '0 0 14px' } }, 'Enter your account email and we will send you a link to reset your password.'),
+    el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), recoverEmail),
+    el('div', { class: 'formActions', style: { marginTop: 14 } },
+      el('button', { class: 'btn', onclick: () => { recoverBox.classList.add('hidden'); authForm.classList.remove('hidden'); recoverMsg.textContent = ''; } }, 'Back'),
+      el('button', { class: 'btn primary', onclick: doRecover }, 'Send reset link')
+    ),
+    recoverMsg
+  );
+  const authForm = el('div', {},
+    tabs,
+    el('div', { class: 'formGrid' }, nameField,
+      el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), emailInput),
+      el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput)
+    ),
+    submitBtn,
+    el('div', { style: { marginTop: 8, textAlign: 'center' } },
+      el('button', { class: 'linkBtn', onclick: () => { authForm.classList.add('hidden'); recoverBox.classList.remove('hidden'); } }, 'Forgot password?')
+    )
+  );
+
+  async function doRecover() {
+    const email = recoverEmail.value.trim();
+    if (!email || !email.includes('@')) { recoverMsg.textContent = 'Enter a valid email address.'; recoverMsg.style.color = 'var(--danger)'; return; }
+    try {
+      await api.sendPasswordReset(email);
+      recoverMsg.style.color = 'var(--success)';
+      recoverMsg.textContent = FAMI.mode === 'demo' ? 'Demo mode — password reset works once connected to Supabase.' : 'Reset link sent — check your email inbox.';
+    } catch (e) {
+      recoverMsg.style.color = 'var(--danger)';
+      recoverMsg.textContent = e.message || 'Could not send the reset link.';
+    }
+  }
 
   async function doAuth() {
     const email = emailInput.value.trim(), password = passInput.value;
@@ -83,7 +163,9 @@ function loginView() {
     msg.textContent = mode === 'signup' ? 'Creating your account...' : 'Signing in...';
     try {
       if (mode === 'signup') {
-        const { error } = await FAMI.client.auth.signUp({ email, password, options: { data: { full_name: nameInput.value.trim(), role: 'viewer' } } });
+        // emailRedirectTo points the confirmation email at wherever this app is
+        // actually running (preview or production), never a hard-coded localhost.
+        const { error } = await FAMI.client.auth.signUp({ email, password, options: { data: { full_name: nameInput.value.trim(), role: 'viewer' }, emailRedirectTo: location.origin } });
         if (error) throw error;
         if (FAMI.mode === 'supabase' && !FAMI.session) {
           msg.style.color = 'var(--success)';
@@ -121,13 +203,9 @@ function loginView() {
         el('div', { class: 'logo', style: { width: 46, height: 46 } }, el('span', { html: LOGO_SVG.replace('width="22" height="22"', 'width="26" height="26"') })),
         el('h2', {}, 'Welcome to Fahmi'),
         el('p', {}, 'Sign in to manage your building.'),
-        tabs,
-        el('div', { class: 'formGrid' }, nameField,
-          el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), emailInput),
-          el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput)
-        ),
-        submitBtn,
+        authForm,
         msg,
+        recoverBox,
         demo ? el('div', { class: 'demoHint' },
           el('b', {}, 'Demo mode — no Supabase keys set yet.'),
           el('span', {}, 'Sign in with ', el('code', {}, 'admin@fami.demo'), ' / ', el('code', {}, 'fami1234'), ' to explore the full app.'),

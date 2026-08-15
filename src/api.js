@@ -473,6 +473,20 @@ export async function deleteGoal(id) {
   await logActivity('savings.deleted', 'Savings', `Deleted goal "${goal ? goal.name : ''}"`, id);
 }
 
+// ---------- auth: password reset ----------
+export async function sendPasswordReset(email) {
+  if (!email || !String(email).includes('@')) throw new Error('Enter a valid email address');
+  // redirectTo = wherever the app is actually running (preview or production),
+  // so the emailed link never points at a hard-coded localhost.
+  const { error } = await sb().auth.resetPasswordForEmail(email, { redirectTo: location.origin });
+  if (error) throw error;
+}
+
+export async function updatePassword(newPassword) {
+  const { error } = await sb().auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
 // ---------- users ----------
 export async function updateUserRole(userId, role) {
   // Goes through the security-definer RPC so an admin can update any profile
