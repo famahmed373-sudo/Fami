@@ -1,6 +1,6 @@
 // ============ FAMI — app bootstrap, layout, router ============
 import * as api from './api.js';
-import { el, esc, iconSvg, toast, timeAgo, loadPrefs, savePrefs, can } from './lib.js';
+import { el, esc, iconSvg, toast, timeAgo, loadPrefs, savePrefs, can, roleBadge } from './lib.js';
 import { renderDashboard, renderShops, renderPayments } from './pages/core.js';
 import { renderExpenses, renderSavings, renderReports } from './pages/finance.js';
 import { renderReminders, renderActivity, renderUsers, renderSettings } from './pages/admin.js';
@@ -262,10 +262,9 @@ function renderUserMini() {
   if (!u) return;
   elUserMini.replaceChildren(
     el('div', { class: 'avatar' }, (u.full_name || u.email || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()),
-    el('div', {}, el('b', {}, esc(u.full_name || u.email)), el('small', {}, roleLabel(u.role)))
+    el('div', { style: { minWidth: 0 } }, el('b', { style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, esc(u.full_name || u.email)), el('div', { style: { marginTop: 3 } }, roleBadge(u.role)))
   );
 }
-const roleLabel = (r) => ({ admin: 'Admin', manager: 'Manager', payment_officer: 'Payment officer', viewer: 'Viewer' }[r] || r);
 
 async function logout() {
   try { await FAMI.client.auth.signOut(); } catch { /* noop */ }

@@ -123,6 +123,12 @@ export function badge(text, color = 'gray', dot = false) {
   return el('span', { class: `badge ${color}` }, dot ? el('span', { class: 'dot' }) : null, text);
 }
 
+// ---- staff roles (single source of truth for identification) ----
+export const roleLabel = (r) => ({ admin: 'Admin', manager: 'Manager', payment_officer: 'Payment officer', viewer: 'Viewer' }[r] || r || '—');
+export const roleColor = (r) => ({ admin: 'purple', manager: 'blue', payment_officer: 'green', viewer: 'gray' }[r] || 'gray');
+// Badge with a status dot, so every place a person appears shows the same role identity.
+export const roleBadge = (role) => badge(roleLabel(role), roleColor(role), true);
+
 // ---- empty / skeleton ----
 export function emptyState(title, sub, iconName = 'inbox') {
   return el('div', { class: 'empty' },

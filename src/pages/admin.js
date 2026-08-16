@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import {
   el, esc, fmtMoney, fmtDate, timeAgo, toast, badge, emptyState, iconSvg, confirmDialog, can,
-  loadPrefs, savePrefs, isDemo
+  loadPrefs, savePrefs, isDemo, roleBadge, roleLabel
 } from '../lib.js';
 import { alarmRow } from './core.js';
 
@@ -66,7 +66,10 @@ export function renderActivity() {
       el('thead', {}, el('tr', {}, el('th', {}, 'When'), el('th', {}, 'Who'), el('th', {}, 'Action'), el('th', {}, 'Details'))),
       el('tbody', {}, list.map((a) => el('tr', {},
         el('td', { style: { whiteSpace: 'nowrap' } }, timeAgo(a.created_at)),
-        el('td', {}, esc(profileName(a.user_id))),
+        el('td', {}, el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+          esc(profileName(a.user_id)),
+          profileRole(a.user_id) ? roleBadge(profileRole(a.user_id)) : null
+        )),
         el('td', {}, badge(String(a.action || '').replace('.', ' '), 'blue')),
         el('td', {}, esc(a.details || '—'))
       )))
@@ -86,6 +89,11 @@ const profileName = (id) => {
   if (FAMI.user && FAMI.user.id === id) return FAMI.user.full_name || 'You';
   const p = (FAMI.profiles || []).find((x) => x.id === id);
   return p ? p.full_name || p.email : 'Unknown';
+};
+const profileRole = (id) => {
+  if (FAMI.user && FAMI.user.id === id) return FAMI.user.role;
+  const p = (FAMI.profiles || []).find((x) => x.id === id);
+  return p ? p.role : '';
 };
 const initials = (name) => (name || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
@@ -121,7 +129,7 @@ export function renderUsers(ctx) {
               el('div', { class: 'avatar', style: { width: 34, height: 34, fontSize: 13 } }, initials(p.full_name)),
               el('div', {}, el('b', {}, esc(p.full_name || '—')), el('div', { class: 'muted', style: { fontSize: 12 } }, esc(p.email || '')), p.id === FAMI.user.id ? el('span', { class: 'muted', style: { fontSize: 11 } }, '(you)') : null)
             )),
-            el('td', {}, badge(roleLabel(p.role), roleColor(p.role))),
+            el('td', {}, roleBadge(p.role)),
             el('td', { class: 'rowActs' }, can('users') ? el('button', { class: 'btn sm2', onclick: save }, 'Save role') : null, sel)
           );
         }))
@@ -139,8 +147,6 @@ export function renderUsers(ctx) {
   );
   return root;
 }
-const roleLabel = (r) => ({ admin: 'Admin', manager: 'Manager', payment_officer: 'Payment officer', viewer: 'Viewer' }[r] || r);
-const roleColor = (r) => ({ admin: 'purple', manager: 'blue', payment_officer: 'green', viewer: 'gray' }[r] || 'gray');
 const rolePill = (title, desc) => el('div', { class: 'pill', style: { flexDirection: 'column', alignItems: 'flex-start', gap: 2 } }, el('b', {}, title), el('span', { class: 'muted', style: { fontSize: 12, fontWeight: 400 } }, desc));
 
 // ================= SETTINGS =================
@@ -156,7 +162,7 @@ export function renderSettings(ctx) {
         el('div', { class: 'formGrid' },
           el('div', { class: 'field' }, el('label', {}, 'Full name'), name),
           el('div', { class: 'field' }, el('label', {}, 'Email'), el('input', { value: FAMI.user.email || '', disabled: true })),
-          el('div', { class: 'field' }, el('label', {}, 'Role'), el('div', { style: { paddingTop: 10 } }, badge(roleLabel(FAMI.user.role), roleColor(FAMI.user.role)))),
+          el('div', { class: 'field' }, el('label', {}, 'Role'), el('div', { style: { paddingTop: 10 } }, roleBadge(FAMI.user.role))),
           el('div', { class: 'formActions full' }, el('button', { class: 'btn primary', onclick: saveProfile }, 'Save profile'))
         )
       ),

@@ -2,7 +2,7 @@
 import * as api from '../api.js';
 import {
   el, esc, fmtMoney, fmtDate, pct, today, monthKey, monthLabel, shortMonth, timeAgo,
-  toast, badge, emptyState, confirmDialog, downloadCSV, iconSvg, openModal, closeModal, can
+  toast, badge, emptyState, confirmDialog, downloadCSV, iconSvg, openModal, closeModal, can, roleBadge
 } from '../lib.js';
 
 const ACTIONS = {
@@ -384,7 +384,7 @@ function historyPanel(params) {
   const renderList = () => {
     const list = filterList();
     wrap.replaceChildren(list.length ? el('div', { class: 'tableWrap' }, el('table', { class: 'tbl' },
-      el('thead', {}, el('tr', {}, el('th', {}, 'Date'), el('th', {}, 'Shop'), el('th', {}, 'Month'), el('th', { class: 'right' }, 'Amount'), el('th', {}, 'Method'), el('th', {}, 'Reference'), el('th', {}, 'Status'), el('th', { class: 'right' }, 'Actions'))),
+      el('thead', {}, el('tr', {}, el('th', {}, 'Date'), el('th', {}, 'Shop'), el('th', {}, 'Month'), el('th', { class: 'right' }, 'Amount'), el('th', {}, 'Method'), el('th', {}, 'Reference'), el('th', {}, 'Status'), el('th', {}, 'By'), el('th', { class: 'right' }, 'Actions'))),
       el('tbody', {}, list.map((p) => el('tr', {},
         el('td', {}, fmtDate(p.date)),
         el('td', {}, el('b', {}, esc(shopName(p.shop_id)))),
@@ -393,6 +393,7 @@ function historyPanel(params) {
         el('td', {}, badge(p.method, 'gray')),
         el('td', {}, esc(p.reference || '—')),
         el('td', {}, p.reversed ? badge('Reversed', 'red') : badge('Posted', 'green', true)),
+        el('td', {}, byCell(p.user_id)),
         el('td', { class: 'rowActs' }, !p.reversed && can('payments') ? el('button', { class: 'btn sm2', onclick: () => reverseFlow(p) }, 'Reverse') : null)
       )))
     )) : emptyState('No payments found', 'Adjust your filters or record a new payment.', 'card'));
@@ -416,6 +417,22 @@ function historyPanel(params) {
 
 const shopName = (id) => { const s = FAMI.shops.find((x) => x.id === id); return s ? s.name : '—'; };
 const tenantOf = (id) => { const s = FAMI.shops.find((x) => x.id === id); return s ? s.tenant_name : ''; };
+// Who recorded this payment, with their role badge so staff are identifiable everywhere.
+const byName = (id) => {
+  if (!id) return '—';
+  const me = FAMI.user && FAMI.user.id === id;
+  const p = me ? FAMI.user : (FAMI.profiles || []).find((x) => x.id === id);
+  return p ? p.full_name || p.email || 'You' : '—';
+};
+const byCell = (id) => {
+  if (!id) return el('span', { class: 'muted' }, '—');
+  const me = FAMI.user && FAMI.user.id === id;
+  const p = me ? FAMI.user : (FAMI.profiles || []).find((x) => x.id === id);
+  return el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+    esc(p ? p.full_name || p.email || 'You' : '—'),
+    p && p.role ? roleBadge(p.role) : null
+  );
+};
 
 function reverseFlow(p) {
   const s = FAMI.shops.find((x) => x.id === p.shop_id);
@@ -432,7 +449,7 @@ function reverseFlow(p) {
 
 function exportPayments(list) {
   downloadCSV(`fami-payments-${today()}.csv`, [
-    ['Date', 'Shop', 'Tenant', 'Month', 'Amount', 'Method', 'Reference', 'Note', 'Status'],
-    ...list.map((p) => [p.date, shopName(p.shop_id), tenantOf(p.shop_id), p.month, p.amount, p.method, p.reference, p.note, p.reversed ? 'reversed' : 'posted'])
+    ['Date', 'Shop', 'Tenant', 'Month', 'Amount', 'Method', 'Reference', 'Note', 'Status', 'Recorded by'],
+    ...list.map((p) => [p.date, shopName(p.shop_id), tenantOf(p.shop_id), p.month, p.amount, p.method, p.reference, p.note, p.reversed ? 'reversed' : 'posted', byName(p.user_id)])
   ]);
 }
