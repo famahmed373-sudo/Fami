@@ -3,9 +3,17 @@ import { createClient } from '@supabase/supabase-js';
 import { createMockDb } from './mock-db.js';
 import { fmtMoney, monthKey, monthShift, monthLabel, shortMonth, today, loadPrefs } from './lib.js';
 
+// Publishable (anon-role) client credentials for the Fahmi Supabase project.
+// The anon key only grants what RLS allows (authenticated users only), so shipping
+// it in the client is safe and standard for Supabase apps. It is used ONLY when the
+// build environment did not inject VITE_* vars (e.g. some static hosting pipelines),
+// so the app never silently falls back to demo mode in production.
+const FALLBACK_SUPABASE_URL = 'https://ovixuisgcqukjxserwwc.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aXh1aXNnY3F1a2p4c2Vyd3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MTY4NDksImV4cCI6MjEwMjM5Mjg0OX0.7f0ekUVzNkE8sRNzDFNw8NcN1lLklWrDp4QdHhI9Y3w';
+
 export function initClient() {
-  const url = import.meta.env.VITE_SUPABASE_URL || '';
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  const url = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
   FAMI.prefs = loadPrefs();
   if (url && key && url.startsWith('http')) {
     FAMI.mode = 'supabase';
