@@ -252,6 +252,10 @@ function loginView() {
           };
           try { await api.ensureProfile(); } catch { /* profile table may be missing */ }
           try { await api.loadProfile(); } catch { /* noop */ }
+          // First account on a fresh install becomes the admin automatically, so
+          // the PIN gate below can accept the admin PIN (82000) instead of locking
+          // everyone out because no admin exists to promote anyone yet.
+          try { await api.bootstrapFirstAdmin(); } catch { /* rpc may not be installed yet */ }
           const expected = api.expectedPin();
           FAMI._pendingPin = false;
           if (String(pinInput.value.trim()) !== expected) {

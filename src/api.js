@@ -541,6 +541,21 @@ export function expectedPin(profile = FAMI.user) {
   return String(profile.pin || ROLE_DEFAULT_PINS[profile.role] || '');
 }
 
+// First-account bootstrap: if no admin exists yet, the person signing in becomes
+// the admin automatically (otherwise a fresh install is locked out — new signups
+// are viewers, and promoting to admin requires an existing admin).
+export async function bootstrapFirstAdmin() {
+  if (!FAMI.user) return false;
+  try {
+    const { data: admins } = await sb().from('profiles').select('id').eq('role', 'admin').limit(1);
+    if (admins && admins.length) return false;
+    const { error } = await sb().rpc('bootstrap_admin');
+    if (error) return false;
+    await loadProfile();
+    return FAMI.user.role === 'admin';
+  } catch { return false; }
+}
+
 export async function updateOwnPin(newPin) {
   const pin = String(newPin || '').trim();
   if (!/^\d{5}$/.test(pin)) throw new Error('PIN must be exactly 5 digits');

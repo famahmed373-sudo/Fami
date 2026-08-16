@@ -215,6 +215,22 @@ $$;
 
 grant execute on function public.set_user_role(uuid, text) to authenticated;
 
+-- Bootstrap: the very first account to sign in becomes the admin, so a fresh
+-- install is never locked out (no admin exists to promote anyone yet).
+create or replace function public.bootstrap_admin()
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if exists (select 1 from public.profiles where role = 'admin') then
+    raise exception 'An admin already exists';
+  end if;
+  update public.profiles set role = 'admin' where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.bootstrap_admin() to authenticated;
+
 -- ------------------------------------------------------------
 -- Row Level Security
 -- ------------------------------------------------------------
