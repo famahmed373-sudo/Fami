@@ -63,6 +63,8 @@ create table if not exists public.payments (
   user_id uuid references public.profiles (id) on delete set null,
   amount numeric(12, 2) not null,
   month text not null,                      -- 'YYYY-MM' the month being paid for
+  period_from date,                         -- the period this payment covers (start)
+  period_upto date,                         -- the period this payment covers (end)
   date date not null default current_date,
   method text default 'Cash',
   reference text default '',
@@ -73,6 +75,9 @@ create table if not exists public.payments (
 );
 create index if not exists payments_shop_month_idx on public.payments (shop_id, month);
 create index if not exists payments_month_idx on public.payments (month);
+-- Add the period columns to existing installs (idempotent).
+alter table public.payments add column if not exists period_from date;
+alter table public.payments add column if not exists period_upto date;
 
 -- Shop photos (stored in the public 'shop-images' storage bucket)
 create table if not exists public.shop_images (

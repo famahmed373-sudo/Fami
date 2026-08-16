@@ -19,8 +19,8 @@ window.FAMI = {
 
 const ROUTES = [
   { id: 'dashboard', title: 'Dashboard', sub: 'Rent collection, finances and alerts at a glance.', icon: 'dashboard', group: 'Overview', render: renderDashboard },
-  { id: 'shops', title: 'Shops & Tenants', sub: 'Register and manage your shop units.', icon: 'shop', group: 'Rentals', render: renderShops },
-  { id: 'payments', title: 'Payments', sub: 'Record rent payments and review history.', icon: 'card', group: 'Rentals', render: renderPayments },
+  { id: 'shops', title: 'Shops & Tenants', sub: 'Register tenants and manage shop units.', icon: 'shop', group: 'Rentals', render: renderShops },
+  { id: 'payments', title: 'Payments', sub: 'Record payments with from/up-to periods and review history.', icon: 'card', group: 'Rentals', render: renderPayments },
   { id: 'expenses', title: 'Expenses', sub: 'Track building costs against monthly budgets.', icon: 'receipt', group: 'Finance', render: renderExpenses },
   { id: 'savings', title: 'Savings', sub: 'Set goals and grow your reserves.', icon: 'piggy', group: 'Finance', render: renderSavings },
   { id: 'reports', title: 'Reports', sub: 'Monthly performance and exportable summaries.', icon: 'chart', group: 'Finance', render: renderReports },
@@ -118,6 +118,41 @@ function loginView() {
     msg.textContent = '';
   } }, label);
   const tabs = el('div', { class: 'authTabs' }, tab('Sign in', 'login'), tab('Create account', 'signup'));
+
+  // ---- sign-in mode selector: Admin / Manager / User ----
+  const ROLE_META = {
+    admin: { label: 'Admin', icon: 'gear', desc: 'Full control, staff & roles', demoEmail: 'admin@fami.demo' },
+    manager: { label: 'Manager', icon: 'shop', desc: 'Shops, payments & finances', demoEmail: 'marta@fami.demo' },
+    user: { label: 'User', icon: 'users', desc: 'Read-only access', demoEmail: 'eyob@fami.demo' }
+  };
+  const DEMO_PASS = 'fami1234';
+  let roleMode = 'admin';
+  const roleHint = el('div', { class: 'roleHint' });
+  const roleRow = el('div', { class: 'roleModes' });
+  const renderRoleModes = () => {
+    roleRow.replaceChildren(...Object.keys(ROLE_META).map((key) => {
+      const m = ROLE_META[key];
+      return el('button', { class: 'roleMode' + (key === roleMode ? ' active' : ''), type: 'button', onclick: () => pickRole(key) },
+        el('span', { class: 'ic', html: iconSvg(m.icon, 15) }),
+        el('span', {}, el('b', {}, m.label), el('small', {}, m.desc))
+      );
+    }));
+  };
+  const pickRole = (key) => {
+    roleMode = key;
+    renderRoleModes();
+    const m = ROLE_META[key];
+    if (demo) {
+      emailInput.value = m.demoEmail;
+      passInput.value = DEMO_PASS;
+      roleHint.textContent = `${m.label} mode — demo credentials filled. Click “Sign in” to enter as ${m.label}.`;
+    } else {
+      emailInput.placeholder = `${m.label.toLowerCase()}@yourbuilding.com`;
+      roleHint.textContent = `You will sign in with your ${m.label} account.`;
+    }
+  };
+  renderRoleModes();
+
   const recoverEmail = el('input', { type: 'email', placeholder: 'name@example.com', autocomplete: 'email' });
   const recoverMsg = el('div', { class: 'muted', style: { minHeight: 20, marginTop: 12, fontSize: 13 } });
   const recoverBox = el('div', { class: 'recoverBox hidden' },
@@ -131,6 +166,8 @@ function loginView() {
   );
   const authForm = el('div', {},
     tabs,
+    roleRow,
+    roleHint,
     el('div', { class: 'formGrid' }, nameField,
       el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), emailInput),
       el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput)
@@ -208,7 +245,7 @@ function loginView() {
         recoverBox,
         demo ? el('div', { class: 'demoHint' },
           el('b', {}, 'Demo mode — no Supabase keys set yet.'),
-          el('span', {}, 'Sign in with ', el('code', {}, 'admin@fami.demo'), ' / ', el('code', {}, 'fami1234'), ' to explore the full app.'),
+          el('span', {}, 'Pick a mode above, or sign in with ', el('code', {}, 'admin@fami.demo'), ' / ', el('code', {}, 'fami1234'), ' to explore the full app.'),
           el('span', { class: 'muted' }, 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Keys tab to go live.')
         ) : null
       )

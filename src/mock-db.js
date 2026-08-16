@@ -24,13 +24,13 @@ function seed() {
   const profiles = users.map((u) => ({ id: u.id, email: u.email, full_name: u.full_name, role: u.role, created_at: nowIso() }));
 
   const shops = [
-    { id: uuid(), name: 'Selam Bakery', unit: 'A-01', tenant_name: 'Hanna Bekele', tenant_phone: '0911 234 567', rent_amount: 4800, status: 'active', registered_month: '2025-09', notes: 'Corner unit, bakery ovens on lease', created_at: nowIso() },
-    { id: uuid(), name: 'Kaldi Coffee House', unit: 'A-02', tenant_name: 'Dawit Girma', tenant_phone: '0912 876 543', rent_amount: 5200, status: 'active', registered_month: '2025-09', notes: '', created_at: nowIso() },
-    { id: uuid(), name: 'Abyssinia Pharmacy', unit: 'B-01', tenant_name: 'Dr. Yonas Alemu', tenant_phone: '0913 445 566', rent_amount: 6500, status: 'active', registered_month: '2025-10', notes: 'Long-term lease', created_at: nowIso() },
-    { id: uuid(), name: 'Habesha Textiles', unit: 'B-02', tenant_name: 'Sara Mekonnen', tenant_phone: '0914 998 877', rent_amount: 5500, status: 'active', registered_month: '2025-11', notes: '', created_at: nowIso() },
-    { id: uuid(), name: 'Golden Butchery', unit: 'C-01', tenant_name: 'Tigist Wondimu', tenant_phone: '0915 112 233', rent_amount: 4200, status: 'active', registered_month: '2025-12', notes: 'Cold room installed', created_at: nowIso() },
-    { id: uuid(), name: 'Zoma Bookstore', unit: 'C-02', tenant_name: 'Liya Tadesse', tenant_phone: '0916 554 433', rent_amount: 3500, status: 'active', registered_month: '2026-01', notes: '', created_at: nowIso() },
-    { id: uuid(), name: 'Tena Beauty Salon', unit: 'C-03', tenant_name: 'Nardos Fikru', tenant_phone: '0917 221 100', rent_amount: 3000, status: 'released', registered_month: '2025-12', notes: 'Released Mar 2026', created_at: nowIso() },
+    { id: uuid(), name: 'Hanna Bekele', unit: 'A-01', tenant_name: 'Bakery', tenant_phone: '0911 234 567', rent_amount: 4800, status: 'active', registered_month: '2025-09', notes: 'Corner unit, bakery ovens on lease', created_at: nowIso() },
+    { id: uuid(), name: 'Dawit Girma', unit: 'A-02', tenant_name: 'Coffee house', tenant_phone: '0912 876 543', rent_amount: 5200, status: 'active', registered_month: '2025-09', notes: '', created_at: nowIso() },
+    { id: uuid(), name: 'Dr. Yonas Alemu', unit: 'B-01', tenant_name: 'Pharmacy', tenant_phone: '0913 445 566', rent_amount: 6500, status: 'active', registered_month: '2025-10', notes: 'Long-term lease', created_at: nowIso() },
+    { id: uuid(), name: 'Sara Mekonnen', unit: 'B-02', tenant_name: 'Textiles & tailoring', tenant_phone: '0914 998 877', rent_amount: 5500, status: 'active', registered_month: '2025-11', notes: '', created_at: nowIso() },
+    { id: uuid(), name: 'Tigist Wondimu', unit: 'C-01', tenant_name: 'Butchery', tenant_phone: '0915 112 233', rent_amount: 4200, status: 'active', registered_month: '2025-12', notes: 'Cold room installed', created_at: nowIso() },
+    { id: uuid(), name: 'Liya Tadesse', unit: 'C-02', tenant_name: 'Bookstore', tenant_phone: '0916 554 433', rent_amount: 3500, status: 'active', registered_month: '2026-01', notes: '', created_at: nowIso() },
+    { id: uuid(), name: 'Nardos Fikru', unit: 'C-03', tenant_name: 'Beauty salon', tenant_phone: '0917 221 100', rent_amount: 3000, status: 'released', registered_month: '2025-12', notes: 'Released Mar 2026', created_at: nowIso() },
     { id: uuid(), name: 'Buna Express Cafe', unit: 'D-01', tenant_name: '', tenant_phone: '', rent_amount: 2600, status: 'vacant', registered_month: '2026-06', notes: 'For rent — contact admin', created_at: nowIso() }
   ];
   const adminId = users[0].id;
@@ -46,13 +46,15 @@ function seed() {
     6: ['2025-12', '2026-01', '2026-02']
   };
   const methods = ['Bank Transfer', 'Cash', 'Mobile Money'];
+  const monthEnd = (m) => { const [y, mo] = m.split('-').map(Number); return `${m}-${String(new Date(y, mo, 0).getDate()).padStart(2, '0')}`; };
   const payments = [];
   shops.forEach((shop, i) => {
     (paid[i] || []).forEach((m, j) => {
       const day = String(1 + ((j * 3) % 25)).padStart(2, '0');
       payments.push({
         id: uuid(), shop_id: shop.id, user_id: adminId, amount: shop.rent_amount,
-        month: m, date: `${m}-${day}`, method: methods[j % methods.length],
+        month: m, period_from: `${m}-01`, period_upto: monthEnd(m),
+        date: `${m}-${day}`, method: methods[j % methods.length],
         reference: `RCP-${m.slice(2).replace('-', '')}-${String(i + 1).padStart(2, '0')}${String(j + 1).padStart(2, '0')}`,
         note: '', reversed: false, created_at: nowIso()
       });

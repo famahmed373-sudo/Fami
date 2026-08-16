@@ -4,16 +4,18 @@ import { createMockDb } from './mock-db.js';
 import { fmtMoney, monthKey, monthShift, monthLabel, shortMonth, today, loadPrefs } from './lib.js';
 
 // Publishable (anon-role) client credentials for the Fahmi Supabase project.
-// The anon key only grants what RLS allows (authenticated users only), so shipping
-// it in the client is safe and standard for Supabase apps. It is used ONLY when the
-// build environment did not inject VITE_* vars (e.g. some static hosting pipelines),
-// so the app never silently falls back to demo mode in production.
+// Both keys only grant what RLS allows (authenticated users only), so shipping
+// them in the client is safe and standard for Supabase apps. They are used ONLY
+// when the build environment did not inject VITE_* vars (e.g. some static hosting
+// pipelines), so the app never silently falls back to demo mode in production.
 const FALLBACK_SUPABASE_URL = 'https://ovixuisgcqukjxserwwc.supabase.co';
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_XIh14wVwGnS2m82gXJgEfQ_-FAC9Jrt';
 const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aXh1aXNnY3F1a2p4c2Vyd3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MTY4NDksImV4cCI6MjEwMjM5Mjg0OX0.7f0ekUVzNkE8sRNzDFNw8NcN1lLklWrDp4QdHhI9Y3w';
 
 export function initClient() {
   const url = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
+  // Prefer the modern publishable key, then the anon key (env or fallback).
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_ANON_KEY;
   FAMI.prefs = loadPrefs();
   if (url && key && url.startsWith('http')) {
     FAMI.mode = 'supabase';
@@ -349,8 +351,8 @@ export async function saveShop(data) {
   if (isNew) {
     res = await sb().from('shops').insert(row).select();
     const created = res.data ? res.data[0] : null;
-    await logActivity('shop.added', 'Shop', `Registered "${row.name}" (${row.unit || 'no unit'}) with ${fmtMoney(row.rent_amount)} rent`, created && created.id);
-    await pushNotification('shop', `New shop registered — ${row.name}`, `${fmtMoney(row.rent_amount)} monthly rent${row.unit ? ` · unit ${row.unit}` : ''}`);
+    await logActivity('shop.added', 'Shop', `Registered tenant "${row.name}" (unit ${row.unit || '—'}) with ${fmtMoney(row.rent_amount)} rent`, created && created.id);
+    await pushNotification('shop', `New tenant registered — ${row.name}`, `${fmtMoney(row.rent_amount)} monthly rent${row.unit ? ` · unit ${row.unit}` : ''}`);
   } else {
     res = await sb().from('shops').update(row).eq('id', data.id).select();
     await logActivity('shop.updated', 'Shop', `Updated "${row.name}"`, data.id);
@@ -367,16 +369,30 @@ export async function deleteShop(id) {
 }
 
 // ---------- payments ----------
-export async function addPayment({ shop_id, month, amount, date, method, reference, note }) {
+export async function addPayment({ shop_id, month, amount, date, method, reference, note, period_from, period_upto }) {
   const shop = FAMI.shops.find((s) => s.id === shop_id);
-  const { data, error } = await sb().from('payments').insert({
-    shop_id, user_id: FAMI.user.id, month, amount: Number(amount), date: date || today(),
+  // The month is derived from the 'from' date when a period is supplied, so the
+  // arrears/stat month attribution keeps working for period-based payments.
+  const m = month || (period_from ? String(period_from).slice(0, 7) : monthKey());
+  const row = {
+    shop_id, user_id: FAMI.user.id, month: m, amount: Number(amount), date: date || today(),
     method, reference: (reference || '').trim(), note: (note || '').trim(),
     reversed: false
-  }).select();
-  if (error) throw error;
-  await logActivity('payment.recorded', 'Payment', `Recorded ${fmtMoney(amount)} rent for ${monthLabel(month)} — ${shop ? shop.name : ''}`, data && data[0] && data[0].id);
-  await pushNotification('payment', `Payment recorded — ${shop ? shop.name : 'Shop'}`, `${fmtMoney(amount)} received for ${monthLabel(month)}`);
+  };
+  if (period_from) row.period_from = period_from;
+  if (period_upto) row.period_upto = period_upto;
+  let res = await sb().from('payments').insert(row).select();
+  if (res.error && /column|period_from|period_upto|42703/i.test(String(res.error.message || ''))) {
+    // The payments table predates the period columns -> retry without them.
+    delete row.period_from;
+    delete row.period_upto;
+    res = await sb().from('payments').insert(row).select();
+  }
+  if (res.error) throw res.error;
+  const data = res.data;
+  const period = period_from && period_upto ? `${period_from} to ${period_upto}` : monthLabel(m);
+  await logActivity('payment.recorded', 'Payment', `Recorded ${fmtMoney(amount)} rent for ${period} — ${shop ? shop.name : ''}`, data && data[0] && data[0].id);
+  await pushNotification('payment', `Payment recorded — ${shop ? shop.name : 'Tenant'}`, `${fmtMoney(amount)} received for ${period}`);
   return data;
 }
 

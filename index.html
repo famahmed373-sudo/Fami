@@ -11,6 +11,21 @@
 </head>
 <body>
 <div id="root"></div>
+<script>
+  // If the app fails to start, show the real error instead of a silent black screen.
+  window.addEventListener('error', function (e) {
+    var root = document.getElementById('root');
+    if (root && !root.children.length) {
+      root.innerHTML = '<div style="position:fixed;inset:0;background:#0a101d;color:#f87171;font:13px/1.6 ui-monospace,monospace;padding:26px;overflow:auto;white-space:pre-wrap"><b style="font-size:15px">Fahmi failed to start</b><br><br>' + String((e.error && (e.error.stack || e.error.message)) || e.message) + '</div>';
+    }
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var root = document.getElementById('root');
+    if (root && !root.children.length) {
+      root.innerHTML = '<div style="position:fixed;inset:0;background:#0a101d;color:#fbbf24;font:13px/1.6 ui-monospace,monospace;padding:26px;overflow:auto;white-space:pre-wrap"><b style="font-size:15px">Fahmi failed to start (async error)</b><br><br>' + String((e.reason && (e.reason.stack || e.reason.message)) || e.reason) + '</div>';
+    }
+  });
+</script>
 <script type="module" src="/src/app.js"></script>
 </body>
 </html>
