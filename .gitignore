@@ -1,5 +1,6 @@
 node_modules/
 dist/
+isolate/
 *.log
 
 # local environment (secrets are managed via the platform Keys tab)
