@@ -17,8 +17,11 @@ create table if not exists public.profiles (
   email text,
   full_name text default '',
   role text not null default 'viewer' check (role in ('admin', 'manager', 'payment_officer', 'viewer')),
+  pin text default '',                    -- optional per-user sign-in PIN (defaults: admin 82000, manager 83000)
   created_at timestamptz not null default now()
 );
+-- Add the pin column to existing installs (idempotent).
+alter table public.profiles add column if not exists pin text;
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -259,9 +262,29 @@ create policy "goals all" on public.savings_goals for all using (auth.role() = '
 drop policy if exists "deposits all" on public.savings_deposits;
 create policy "deposits all" on public.savings_deposits for all using (auth.role() = 'authenticated');
 
--- Audit trail: everyone can read; only the actor can insert their own entry.
+-- Audit trail visibility (enforced at the database, not just the UI):
+--  - Admins: full audit trail — every update by anyone.
+--  - Managers: their own updates, other managers' updates and users' (payment
+--    officers / viewers) activity. The admin's updates stay private to the admin.
+--  - Payment officers / viewers: their own updates only.
 drop policy if exists "activity select all" on public.activity;
-create policy "activity select all" on public.activity for select using (auth.role() = 'authenticated');
+drop policy if exists "activity select by role" on public.activity;
+create policy "activity select by role" on public.activity for select using (
+  exists (
+    select 1 from public.profiles me
+    where me.id = auth.uid() and (
+      me.role = 'admin'
+      or (
+        me.role = 'manager'
+        and (activity.user_id is null or exists (
+          select 1 from public.profiles actor
+          where actor.id = activity.user_id and actor.role <> 'admin'
+        ))
+      )
+      or (me.role in ('payment_officer', 'viewer') and activity.user_id = auth.uid())
+    )
+  )
+);
 
 drop policy if exists "activity insert own" on public.activity;
 create policy "activity insert own" on public.activity for insert with check (auth.uid() = user_id);

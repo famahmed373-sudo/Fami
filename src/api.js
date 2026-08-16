@@ -528,3 +528,31 @@ export async function updateProfile(fields) {
   Object.assign(FAMI.user, fields);
   await logActivity('profile.updated', 'Profile', 'Updated profile details');
 }
+
+// ---------- role security PINs ----------
+// Admin mode requires 82000, manager mode 83000. Each admin/manager can change
+// their own PIN from Settings -> Security (the change form asks only email and
+// password to verify identity). The stored per-user PIN (profiles.pin) takes
+// precedence over the built-in default.
+export const ROLE_DEFAULT_PINS = { admin: '82000', manager: '83000' };
+
+export function expectedPin(profile = FAMI.user) {
+  if (!profile) return '';
+  return String(profile.pin || ROLE_DEFAULT_PINS[profile.role] || '');
+}
+
+export async function updateOwnPin(newPin) {
+  const pin = String(newPin || '').trim();
+  if (!/^\d{5}$/.test(pin)) throw new Error('PIN must be exactly 5 digits');
+  if (!FAMI.user) throw new Error('Not signed in');
+  if (FAMI.user.role !== 'admin' && FAMI.user.role !== 'manager') throw new Error('Only admins and managers have a security PIN');
+  const { error } = await sb().from('profiles').update({ pin }).eq('id', FAMI.user.id);
+  if (error && /column|pin|42703/i.test(String(error.message || ''))) {
+    // profiles table predates the pin column -> keep it locally for this user.
+    try { localStorage.setItem('fami:pin:' + FAMI.user.id, pin); } catch { /* noop */ }
+  } else if (error) {
+    throw error;
+  }
+  FAMI.user.pin = pin;
+  await logActivity('pin.changed', 'Security', 'Changed the security PIN');
+}

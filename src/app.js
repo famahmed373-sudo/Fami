@@ -39,8 +39,10 @@ function boot() {
     FAMI.session = data.session;
     client.auth.onAuthStateChange((event, session) => {
       FAMI.session = session;
-      if (session) { if (isRecoveryUrl()) showResetPassword(); else startApp(); }
-      else showLogin();
+      // While a PIN-gated sign-in is in progress, hold off on startApp() until
+      // the PIN is verified (wrong PIN signs the session back out again).
+      if (session && !FAMI._pendingPin) { if (isRecoveryUrl()) showResetPassword(); else startApp(); }
+      else if (!session) showLogin();
     });
     if (FAMI.session) { if (isRecoveryUrl()) showResetPassword(); else startApp(); }
     else showLogin();
@@ -115,15 +117,16 @@ function loginView() {
     nameField.classList.toggle('hidden', m !== 'signup');
     submitBtn.textContent = m === 'signup' ? 'Create account' : 'Sign in';
     passInput.autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+    syncPinField();
     msg.textContent = '';
   } }, label);
   const tabs = el('div', { class: 'authTabs' }, tab('Sign in', 'login'), tab('Create account', 'signup'));
 
   // ---- sign-in mode selector: Admin / Manager / User ----
   const ROLE_META = {
-    admin: { label: 'Admin', icon: 'gear', desc: 'Full control, staff & roles', demoEmail: 'admin@fami.demo' },
-    manager: { label: 'Manager', icon: 'shop', desc: 'Shops, payments & finances', demoEmail: 'marta@fami.demo' },
-    user: { label: 'User', icon: 'users', desc: 'Read-only access', demoEmail: 'eyob@fami.demo' }
+    admin: { label: 'Admin', icon: 'gear', desc: 'Full control, staff & roles', demoEmail: 'admin@fami.demo', pin: '82000' },
+    manager: { label: 'Manager', icon: 'shop', desc: 'Shops, payments & finances', demoEmail: 'marta@fami.demo', pin: '83000' },
+    user: { label: 'User', icon: 'users', desc: 'Read-only access', demoEmail: 'eyob@fami.demo', pin: '' }
   };
   const DEMO_PASS = 'fami1234';
   let roleMode = 'admin';
@@ -138,6 +141,18 @@ function loginView() {
       );
     }));
   };
+  const pinInput = el('input', { type: 'password', inputmode: 'numeric', maxLength: 5, autocomplete: 'off', placeholder: '5-digit PIN' });
+  const pinField = el('div', { class: 'field hidden' },
+    el('label', { html: 'Security PIN <span class="req">*</span>' }),
+    pinInput,
+    el('div', { class: 'hint' }, roleMode === 'manager' ? 'Manager PIN — default 83000. Change it in Settings.' : 'Admin PIN — default 82000. Change it in Settings.')
+  );
+  const pinVisible = () => mode === 'login' && roleMode !== 'user';
+  const syncPinField = () => {
+    pinField.classList.toggle('hidden', !pinVisible());
+    if (pinVisible() && !pinInput.value) pinInput.value = demo ? ROLE_META[roleMode].pin : '';
+    pinField.querySelector('.hint').textContent = roleMode === 'manager' ? 'Manager PIN — default 83000. Change it in Settings.' : 'Admin PIN — default 82000. Change it in Settings.';
+  };
   const pickRole = (key) => {
     roleMode = key;
     renderRoleModes();
@@ -145,11 +160,12 @@ function loginView() {
     if (demo) {
       emailInput.value = m.demoEmail;
       passInput.value = DEMO_PASS;
-      roleHint.textContent = `${m.label} mode — demo credentials filled. Click “Sign in” to enter as ${m.label}.`;
+      roleHint.textContent = `${m.label} mode — demo credentials filled. Click “Sign in”${m.pin ? ` (PIN ${m.pin})` : ''} to enter as ${m.label}.`;
     } else {
       emailInput.placeholder = `${m.label.toLowerCase()}@yourbuilding.com`;
-      roleHint.textContent = `You will sign in with your ${m.label} account.`;
+      roleHint.textContent = m.pin ? `${m.label} mode requires your security PIN (default ${m.pin}) in addition to email and password.` : `You will sign in with your ${m.label} account — only email and password are required.`;
     }
+    syncPinField();
   };
   renderRoleModes();
 
@@ -170,7 +186,8 @@ function loginView() {
     roleHint,
     el('div', { class: 'formGrid' }, nameField,
       el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), emailInput),
-      el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput)
+      el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput),
+      pinField
     ),
     submitBtn,
     el('div', { style: { marginTop: 8, textAlign: 'center' } },
@@ -211,8 +228,42 @@ function loginView() {
           return;
         }
       } else {
+        // PIN-gated modes (admin / manager): hold startApp() until the PIN is
+        // verified against the account's PIN (default 82000 admin / 83000 manager,
+        // or the PIN they set in Settings).
+        if (roleMode !== 'user') {
+          const pin = pinInput.value.trim();
+          if (!/^\d{5}$/.test(pin)) {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = `${ROLE_META[roleMode].label} mode requires a 5-digit security PIN.`;
+            submitBtn.disabled = false;
+            return;
+          }
+          FAMI._pendingPin = true;
+        }
         const { error } = await FAMI.client.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) { FAMI._pendingPin = false; throw error; }
+        if (FAMI._pendingPin) {
+          const s = FAMI.session;
+          FAMI.user = {
+            id: s.user.id, email: s.user.email,
+            full_name: (s.user.user_metadata && s.user.user_metadata.full_name) || s.user.email.split('@')[0],
+            role: (s.user.user_metadata && s.user.user_metadata.role) || 'viewer'
+          };
+          try { await api.ensureProfile(); } catch { /* profile table may be missing */ }
+          try { await api.loadProfile(); } catch { /* noop */ }
+          const expected = api.expectedPin();
+          FAMI._pendingPin = false;
+          if (String(pinInput.value.trim()) !== expected) {
+            try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
+            FAMI.user = null;
+            showLogin();
+            toast(`Incorrect PIN — ${ROLE_META[roleMode].label} mode requires your security PIN.`, 'error');
+            return;
+          }
+          startApp();
+          return;
+        }
       }
     } catch (e) {
       msg.style.color = 'var(--danger)';

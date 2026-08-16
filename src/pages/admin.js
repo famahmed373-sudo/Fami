@@ -60,8 +60,23 @@ const settingRow = (title, desc, control) => el('div', { class: 'settingRow' }, 
 export function renderActivity() {
   let q = '';
   const wrap = el('div', {});
+  // Role-based audit visibility:
+  //  - Admin: full audit trail — every update by anyone in the building.
+  //  - Manager: their own updates, other managers' updates, and users' (payment
+  //    officers / viewers) activity. The admin's updates stay private to the admin.
+  //  - Viewer / payment officer: their own updates only.
+  const me = FAMI.user;
+  const isAdmin = !!me && me.role === 'admin';
+  const isManager = !!me && me.role === 'manager';
+  const visibleActivity = () => {
+    if (!me) return [];
+    if (isAdmin) return FAMI.activity;
+    if (isManager) return FAMI.activity.filter((a) => !a.user_id || profileRole(a.user_id) !== 'admin');
+    return FAMI.activity.filter((a) => a.user_id === me.id);
+  };
   const renderList = () => {
-    const list = FAMI.activity.filter((a) => !q || String(a.details || '').toLowerCase().includes(q.toLowerCase()) || String(a.action || '').toLowerCase().includes(q.toLowerCase()));
+    const base = visibleActivity();
+    const list = base.filter((a) => !q || String(a.details || '').toLowerCase().includes(q.toLowerCase()) || String(a.action || '').toLowerCase().includes(q.toLowerCase()));
     wrap.replaceChildren(list.length ? el('div', { class: 'tableWrap' }, el('table', { class: 'tbl' },
       el('thead', {}, el('tr', {}, el('th', {}, 'When'), el('th', {}, 'Who'), el('th', {}, 'Action'), el('th', {}, 'Details'))),
       el('tbody', {}, list.map((a) => el('tr', {},
@@ -73,13 +88,19 @@ export function renderActivity() {
         el('td', {}, badge(String(a.action || '').replace('.', ' '), 'blue')),
         el('td', {}, esc(a.details || '—'))
       )))
-    )) : emptyState('No activity found', 'Significant actions will be logged here.', 'clock'));
+    )) : emptyState('No activity found', isManager ? 'Your team has not made any updates yet.' : 'Your updates will appear here.', 'clock'));
   };
+  const note = isAdmin
+    ? 'Full audit trail — every update made by staff.'
+    : isManager
+      ? 'Team activity — your updates, other managers’ updates and users’ activity. Admin updates are private.'
+      : 'Your updates only.';
   const root = el('div', {},
     el('div', { class: 'toolbar' },
       el('div', { class: 'search' }, el('span', { html: iconSvg('search', 16) }), el('input', { placeholder: 'Search activity...', oninput: (e) => { q = e.target.value; renderList(); } })),
-      el('span', { class: 'muted', style: { fontSize: 12.5 } }, `${FAMI.activity.length} entries`)
+      el('span', { class: 'muted', style: { fontSize: 12.5 } }, `${visibleActivity().length} entries`)
     ),
+    el('div', { class: 'hint', style: { margin: '-2px 0 12px', fontSize: 12.5 } }, note),
     wrap
   );
   renderList();
@@ -111,7 +132,7 @@ export function renderUsers(ctx) {
       el('div', { class: 'panelHead' }, el('div', {}, el('h2', {}, 'Users & roles'), el('p', {}, 'Control who can access FAMI and what they can do.'))),
       el('div', { style: { display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '12px 14px', background: 'rgba(96,165,250,.12)', border: '1px solid rgba(96,165,250,.35)', borderRadius: 12, marginBottom: 16, fontSize: 13 } },
         el('span', { html: iconSvg('users', 17), style: { color: '#60a5fa' } }),
-        el('span', { style: { flex: 1, minWidth: 220 } }, 'New staff join by creating an account, then you promote them here. When you change a role the staff member is notified immediately.'),
+        el('span', { style: { flex: 1, minWidth: 220 } }, 'Only you, the admin, can grant Manager access. New staff join by creating an account, then you promote them here — when you change a role, the staff member is notified immediately.'),
         inviteBtn
       ),
       el('div', { class: 'tableWrap' }, el('table', { class: 'tbl' },
@@ -136,12 +157,12 @@ export function renderUsers(ctx) {
       ))
     ),
     el('div', { class: 'panel' },
-      el('div', { class: 'panelHead' }, el('div', {}, el('h2', {}, 'Role guide'), el('p', {}, 'What each role is allowed to do.'))),
+      el('div', { class: 'panelHead' }, el('div', {}, el('h2', {}, 'Role guide'), el('p', {}, 'What each role can see and do.'))),
       el('div', { class: 'pillList' },
-        rolePill('Admin', 'Full control, including user roles.'),
-        rolePill('Manager', 'Manage shops, payments, expenses and savings.'),
-        rolePill('Payment officer', 'Record payments and manage shops.'),
-        rolePill('Viewer', 'Read-only access to everything.')
+        rolePill('Admin', 'Watches and controls everything — every update, every role. Only the admin grants Manager access.'),
+        rolePill('Manager', 'Manages shops, payments, expenses and savings. Sees team activity (own, other managers’ and users’ updates) — admin updates stay private to the admin.'),
+        rolePill('Payment officer', 'Records payments and manages shops. Sees only their own updates.'),
+        rolePill('Viewer', 'Read-only access. Sees only their own updates.')
       )
     )
   );
@@ -154,6 +175,50 @@ export function renderSettings(ctx) {
   const prefs = loadPrefs();
   const name = el('input', { value: FAMI.user.full_name || '' });
   const curSel = el('select', {}, ['ETB', 'USD'].map((c) => el('option', { value: c, selected: prefs.currency === c }, c === 'ETB' ? 'Ethiopian Birr (ETB)' : 'US Dollar (USD)')));
+  const isStaff = FAMI.user && (FAMI.user.role === 'admin' || FAMI.user.role === 'manager');
+
+  // Security PIN manager: only admins and managers have one. Changing it asks
+  // ONLY for the account email + password to verify identity, then sets the new
+  // 5-digit PIN that replaces the built-in default (82000 admin / 83000 manager).
+  function securityPanel() {
+    const emailIn = el('input', { type: 'email', value: FAMI.user.email || '', disabled: true });
+    const passIn = el('input', { type: 'password', placeholder: 'Your password', autocomplete: 'current-password' });
+    const pinIn = el('input', { type: 'password', inputmode: 'numeric', maxLength: 5, placeholder: '5-digit PIN', autocomplete: 'off' });
+    const pinIn2 = el('input', { type: 'password', inputmode: 'numeric', maxLength: 5, placeholder: 'Repeat PIN', autocomplete: 'off' });
+    const pinMsg = el('div', { class: 'hint', style: { gridColumn: '1/-1' } });
+    const save = async () => {
+      const newPin = pinIn.value.trim();
+      pinMsg.style.color = 'var(--danger)';
+      if (!/^\d{5}$/.test(newPin)) { pinMsg.textContent = 'New PIN must be exactly 5 digits.'; return; }
+      if (newPin !== pinIn2.value.trim()) { pinMsg.textContent = 'The two PINs do not match.'; return; }
+      if (!passIn.value) { pinMsg.textContent = 'Enter your password to verify it is you.'; return; }
+      try {
+        // Verify identity with the account's email + password only.
+        const { error } = await FAMI.client.auth.signInWithPassword({ email: FAMI.user.email, password: passIn.value });
+        if (error) throw new Error('Wrong password — verification failed.');
+        await api.updateOwnPin(newPin);
+        toast('Security PIN updated');
+        pinMsg.style.color = 'var(--success)';
+        pinMsg.textContent = 'PIN updated — use it next time you sign in.';
+        passIn.value = ''; pinIn.value = ''; pinIn2.value = '';
+      } catch (e) { pinMsg.textContent = e.message || 'Could not update the PIN.'; }
+    };
+    return el('div', { class: 'panel' },
+      el('div', { class: 'panelHead' }, el('div', {}, el('h2', {}, 'Security PIN'), el('p', {}, `Your ${FAMI.user.role === 'admin' ? 'admin' : 'manager'} sign-in requires a 5-digit PIN in addition to your password.`))),
+      el('div', { style: { marginBottom: 14, fontSize: 13 } },
+        'Current PIN: ', el('code', { style: { fontSize: 13 } }, api.expectedPin() || '—'),
+        el('span', { class: 'muted' }, '  — change it below. The form asks only your email and password to verify.')
+      ),
+      el('div', { class: 'formGrid' },
+        el('div', { class: 'field' }, el('label', {}, 'Email'), emailIn),
+        el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passIn),
+        el('div', { class: 'field' }, el('label', { html: 'New PIN <span class="req">*</span>' }), pinIn),
+        el('div', { class: 'field' }, el('label', { html: 'Confirm PIN <span class="req">*</span>' }), pinIn2),
+        pinMsg,
+        el('div', { class: 'formActions full' }, el('button', { class: 'btn primary', onclick: save }, 'Change PIN'))
+      )
+    );
+  }
 
   const root = el('div', {},
     el('div', { class: 'grid2' },
@@ -177,6 +242,7 @@ export function renderSettings(ctx) {
         )
       )
     ),
+    isStaff ? securityPanel() : null,
     el('div', { class: 'panel' },
       el('div', { class: 'panelHead' }, el('div', {}, el('h2', {}, 'Connection'), el('p', {}, 'How FAMI stores its data.'))),
       el('div', { class: 'settingRow' },
