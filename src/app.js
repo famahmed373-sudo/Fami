@@ -106,21 +106,40 @@ function loginView() {
   const nameInput = el('input', { placeholder: 'Your full name', autocomplete: 'name' });
   const emailInput = el('input', { type: 'email', placeholder: 'name@example.com', autocomplete: 'email' });
   const passInput = el('input', { type: 'password', placeholder: 'Minimum 6 characters', autocomplete: 'current-password' });
+  const codeInput = el('input', { type: 'text', inputmode: 'numeric', maxLength: 6, autocomplete: 'one-time-code', placeholder: '6-digit code', style: { letterSpacing: '4px', textAlign: 'center', fontWeight: 600 } });
   const nameField = el('div', { class: 'field hidden' }, el('label', { html: 'Full name <span class="req">*</span>' }), nameInput);
+  const passField = el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput);
+  const codeField = el('div', { class: 'field hidden' }, el('label', { html: 'Code from email <span class="req">*</span>' }), codeInput);
   const msg = el('div', { class: 'muted', style: { minHeight: 20, marginTop: 12, fontSize: 13 } });
   const submitBtn = el('button', { class: 'btn primary', style: { width: '100%', marginTop: 14, padding: '12px' }, onclick: doAuth }, 'Sign in');
+  // Email-code (OTP) auth: sends a 6-digit code instead of a confirmation link,
+  // so registration + sign-in work even with "Confirm email" enabled.
+  let useCode = false;
+  let codeStage = 'idle'; // 'idle' (code not sent yet) | 'sent' (awaiting the code)
+  const methodBtn = el('button', { class: 'linkBtn', type: 'button', onclick: () => { useCode = !useCode; codeStage = 'idle'; codeInput.value = ''; syncMethodUI(); msg.textContent = ''; } }, 'Use an email code instead');
 
   const tab = (label, m) => el('button', { class: m === mode ? 'active' : '', onclick: () => {
     mode = m;
     tabs.children[0].classList.toggle('active', m === 'login');
     tabs.children[1].classList.toggle('active', m === 'signup');
     nameField.classList.toggle('hidden', m !== 'signup');
-    submitBtn.textContent = m === 'signup' ? 'Create account' : 'Sign in';
+    codeStage = 'idle';
+    codeInput.value = '';
     passInput.autocomplete = m === 'signup' ? 'new-password' : 'current-password';
-    syncPinField();
+    syncMethodUI();
     msg.textContent = '';
   } }, label);
   const tabs = el('div', { class: 'authTabs' }, tab('Sign in', 'login'), tab('Create account', 'signup'));
+
+  const syncMethodUI = () => {
+    passField.classList.toggle('hidden', useCode);
+    codeField.classList.toggle('hidden', !useCode || codeStage !== 'sent');
+    methodBtn.textContent = useCode ? 'Use password instead' : 'Use an email code instead';
+    submitBtn.textContent = useCode
+      ? (codeStage === 'sent' ? (mode === 'signup' ? 'Verify & create account' : 'Verify & sign in') : 'Send verification code')
+      : (mode === 'signup' ? 'Create account' : 'Sign in');
+    syncPinField();
+  };
 
   // ---- sign-in mode selector: Admin / Manager / User ----
   const ROLE_META = {
@@ -186,12 +205,14 @@ function loginView() {
     roleHint,
     el('div', { class: 'formGrid' }, nameField,
       el('div', { class: 'field' }, el('label', { html: 'Email <span class="req">*</span>' }), emailInput),
-      el('div', { class: 'field' }, el('label', { html: 'Password <span class="req">*</span>' }), passInput),
+      passField,
+      codeField,
       pinField
     ),
     submitBtn,
     el('div', { style: { marginTop: 8, textAlign: 'center' } },
-      el('button', { class: 'linkBtn', onclick: () => { authForm.classList.add('hidden'); recoverBox.classList.remove('hidden'); } }, 'Forgot password?')
+      demo ? null : methodBtn,
+      el('div', {}, el('button', { class: 'linkBtn', onclick: () => { authForm.classList.add('hidden'); recoverBox.classList.remove('hidden'); } }, 'Forgot password?'))
     )
   );
 
@@ -226,10 +247,99 @@ function loginView() {
     return true;
   }
 
+  // Shared post-auth entry: applies the session, then (for PIN-gated admin /
+  // manager modes) verifies the security PIN before entering the workspace.
+  async function finishSignIn(session) {
+    if (!session) { msg.style.color = 'var(--danger)'; msg.textContent = 'Sign-in did not return a session — please try again.'; return false; }
+    await applySession(session);
+    if (!FAMI._pendingPin) return true;
+    // First account on a fresh install becomes the admin automatically, so the
+    // PIN gate can accept the admin PIN (82000) instead of locking everyone out
+    // because no admin exists to promote anyone yet.
+    try { await api.bootstrapFirstAdmin(); } catch { /* rpc may not be installed yet */ }
+    // Refresh the profile from the database so the gate checks the real role +
+    // PIN, not the signup-time metadata (which is always 'viewer').
+    try { await api.loadProfile(); } catch { /* profile table may be missing */ }
+    const role = (FAMI.user && FAMI.user.role) || 'viewer';
+    if (role !== 'admin' && role !== 'manager') {
+      try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
+      FAMI.user = null;
+      showLogin();
+      msg.style.color = 'var(--danger)';
+      msg.textContent = `Your account is registered as “${role}”. Only an admin or manager account can enter ${ROLE_META[roleMode].label} mode — ask the admin to grant you access.`;
+      return false;
+    }
+    const expected = api.expectedPin();
+    FAMI._pendingPin = false;
+    if (String(pinInput.value.trim()) !== expected) {
+      try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
+      FAMI.user = null;
+      showLogin();
+      msg.style.color = 'var(--danger)';
+      msg.textContent = `Incorrect PIN — ${ROLE_META[roleMode].label} mode requires your security PIN (default ${ROLE_META[roleMode].pin}).`;
+      return false;
+    }
+    startApp();
+    return true;
+  }
+
   async function doAuth() {
-    const email = emailInput.value.trim(), password = passInput.value;
-    if (!email || password.length < 6) { msg.textContent = 'Enter a valid email and a password of at least 6 characters.'; msg.style.color = 'var(--danger)'; return; }
+    const email = emailInput.value.trim();
+    if (!email || !email.includes('@')) { msg.textContent = 'Enter a valid email address.'; msg.style.color = 'var(--danger)'; return; }
     if (mode === 'signup' && !nameInput.value.trim()) { msg.textContent = 'Please enter your full name.'; msg.style.color = 'var(--danger)'; return; }
+
+    // ---------- email-code (OTP) flow: send the code, then verify it ----------
+    if (useCode) {
+      if (codeStage === 'idle') {
+        submitBtn.disabled = true;
+        msg.style.color = 'var(--muted)';
+        msg.textContent = 'Sending your code...';
+        try {
+          const { error } = await FAMI.client.auth.signInWithOtp({
+            email,
+            options: {
+              shouldCreateUser: mode === 'signup',
+              data: mode === 'signup' ? { full_name: nameInput.value.trim(), role: 'viewer' } : undefined,
+              emailRedirectTo: location.origin
+            }
+          });
+          if (error) throw error;
+          codeStage = 'sent';
+          msg.style.color = 'var(--success)';
+          msg.textContent = 'Code sent to ' + email + (mode === 'signup' ? ' — enter it below to finish creating your account.' : ' — enter the 6-digit code from the email.') + ' (Check the spam folder too.)';
+          syncMethodUI();
+          codeInput.focus();
+        } catch (e) {
+          msg.style.color = 'var(--danger)';
+          msg.textContent = e.message || 'Could not send the code.';
+        } finally { submitBtn.disabled = false; }
+        return;
+      }
+      const code = codeInput.value.trim();
+      if (!/^\d{6}$/.test(code)) { msg.textContent = 'Enter the 6-digit code from the email.'; msg.style.color = 'var(--danger)'; return; }
+      if (roleMode !== 'user') {
+        const pin = pinInput.value.trim();
+        if (!/^\d{5}$/.test(pin)) { msg.textContent = `${ROLE_META[roleMode].label} mode requires a 5-digit security PIN.`; msg.style.color = 'var(--danger)'; return; }
+        FAMI._pendingPin = true;
+      }
+      submitBtn.disabled = true;
+      msg.style.color = 'var(--muted)';
+      msg.textContent = 'Verifying your code...';
+      try {
+        const { data, error } = await FAMI.client.auth.verifyOtp({ email, token: code, type: 'email' });
+        if (error) { FAMI._pendingPin = false; throw error; }
+        await finishSignIn(data.session || FAMI.session);
+      } catch (e) {
+        FAMI._pendingPin = false;
+        msg.style.color = 'var(--danger)';
+        msg.textContent = e.message || 'Verification failed.';
+      } finally { submitBtn.disabled = false; }
+      return;
+    }
+
+    // ---------- password flow ----------
+    const password = passInput.value;
+    if (password.length < 6) { msg.textContent = 'Enter a password of at least 6 characters.'; msg.style.color = 'var(--danger)'; return; }
     submitBtn.disabled = true;
     msg.style.color = 'var(--muted)';
     msg.textContent = mode === 'signup' ? 'Creating your account...' : 'Signing in...';
@@ -243,7 +353,7 @@ function loginView() {
         // Email confirmation enabled -> the account needs confirming first.
         if (FAMI.mode === 'supabase' && !session) {
           msg.style.color = 'var(--success)';
-          msg.textContent = 'Account created! Check your email to confirm your address, then sign in.';
+          msg.textContent = 'Account created! Confirm your email — or use “Use an email code instead” below; the code verifies instantly.';
           mode = 'login'; tabs.children[0].click();
           return;
         }
@@ -265,42 +375,13 @@ function loginView() {
         }
         const { data, error } = await FAMI.client.auth.signInWithPassword({ email, password });
         if (error) { FAMI._pendingPin = false; throw error; }
-        await applySession(data.session || FAMI.session);
-        if (FAMI._pendingPin) {
-          // First account on a fresh install becomes the admin automatically, so
-          // the PIN gate below can accept the admin PIN (82000) instead of locking
-          // everyone out because no admin exists to promote anyone yet.
-          try { await api.bootstrapFirstAdmin(); } catch { /* rpc may not be installed yet */ }
-          // Refresh the profile from the database so the gate checks the real
-          // role + PIN, not the signup-time metadata (which is always 'viewer').
-          try { await api.loadProfile(); } catch { /* profile table may be missing */ }
-          const role = (FAMI.user && FAMI.user.role) || 'viewer';
-          if (role !== 'admin' && role !== 'manager') {
-            try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
-            FAMI.user = null;
-            showLogin();
-            msg.style.color = 'var(--danger)';
-            msg.textContent = `Your account is registered as “${role}”. Only an admin or manager account can enter ${ROLE_META[roleMode].label} mode — ask the admin to grant you access.`;
-            return;
-          }
-          const expected = api.expectedPin();
-          FAMI._pendingPin = false;
-          if (String(pinInput.value.trim()) !== expected) {
-            try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
-            FAMI.user = null;
-            showLogin();
-            msg.style.color = 'var(--danger)';
-            msg.textContent = `Incorrect PIN — ${ROLE_META[roleMode].label} mode requires your security PIN (default ${ROLE_META[roleMode].pin}).`;
-            return;
-          }
-          startApp();
-        }
+        await finishSignIn(data.session || FAMI.session);
       }
     } catch (e) {
       msg.style.color = 'var(--danger)';
       const m = e.message || 'Authentication failed.';
       msg.textContent = /not confirmed|confirm your email/i.test(m)
-        ? 'Please confirm your email first — check your inbox (and spam folder), then sign in.'
+        ? 'Your email is not confirmed yet — use the “Use an email code instead” option below; the code verifies instantly.'
         : m;
     } finally { submitBtn.disabled = false; }
   }
