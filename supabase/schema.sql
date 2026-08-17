@@ -257,6 +257,13 @@ create policy "profiles update own" on public.profiles for update
   using (auth.uid() = id)
   with check (auth.uid() = id and role = (select role from public.profiles where id = auth.uid()));
 
+-- Accounts created before the trigger was installed have no profile row yet:
+-- allow every user to create their own row (id must be their own, so no one can
+-- impersonate another user's profile).
+drop policy if exists "profiles insert own" on public.profiles;
+create policy "profiles insert own" on public.profiles for insert
+  with check (auth.uid() = id);
+
 drop policy if exists "shops all" on public.shops;
 create policy "shops all" on public.shops for all using (auth.role() = 'authenticated');
 

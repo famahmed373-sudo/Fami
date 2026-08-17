@@ -271,13 +271,26 @@ function loginView() {
           // the PIN gate below can accept the admin PIN (82000) instead of locking
           // everyone out because no admin exists to promote anyone yet.
           try { await api.bootstrapFirstAdmin(); } catch { /* rpc may not be installed yet */ }
+          // Refresh the profile from the database so the gate checks the real
+          // role + PIN, not the signup-time metadata (which is always 'viewer').
+          try { await api.loadProfile(); } catch { /* profile table may be missing */ }
+          const role = (FAMI.user && FAMI.user.role) || 'viewer';
+          if (role !== 'admin' && role !== 'manager') {
+            try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
+            FAMI.user = null;
+            showLogin();
+            msg.style.color = 'var(--danger)';
+            msg.textContent = `Your account is registered as “${role}”. Only an admin or manager account can enter ${ROLE_META[roleMode].label} mode — ask the admin to grant you access.`;
+            return;
+          }
           const expected = api.expectedPin();
           FAMI._pendingPin = false;
           if (String(pinInput.value.trim()) !== expected) {
             try { await FAMI.client.auth.signOut(); } catch { /* noop */ }
             FAMI.user = null;
             showLogin();
-            toast(`Incorrect PIN — ${ROLE_META[roleMode].label} mode requires your security PIN.`, 'error');
+            msg.style.color = 'var(--danger)';
+            msg.textContent = `Incorrect PIN — ${ROLE_META[roleMode].label} mode requires your security PIN (default ${ROLE_META[roleMode].pin}).`;
             return;
           }
           startApp();
