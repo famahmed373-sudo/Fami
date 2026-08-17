@@ -1,5 +1,5 @@
 // ============ FAMI system pages: reminders, activity, users, settings ============
-import * as api from '../api.js';
+import * as api from '../supabase.js';
 import {
   el, esc, fmtMoney, fmtDate, timeAgo, toast, badge, emptyState, iconSvg, confirmDialog, can,
   loadPrefs, savePrefs, isDemo, roleBadge, roleLabel

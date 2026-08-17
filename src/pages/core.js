@@ -1,5 +1,5 @@
 // ============ FAMI core pages: dashboard, shops, payments ============
-import * as api from '../api.js';
+import * as api from '../supabase.js';
 import {
   el, esc, fmtMoney, fmtDate, pct, today, monthKey, monthLabel, shortMonth, timeAgo,
   toast, badge, emptyState, confirmDialog, downloadCSV, iconSvg, openModal, closeModal, can, roleBadge

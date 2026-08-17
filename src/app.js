@@ -1,5 +1,5 @@
 // ============ FAMI — app bootstrap, layout, router ============
-import * as api from './api.js';
+import * as api from './supabase.js';
 import { el, esc, iconSvg, toast, timeAgo, loadPrefs, savePrefs, can, roleBadge } from './lib.js';
 import { renderDashboard, renderShops, renderPayments } from './pages/core.js';
 import { renderExpenses, renderSavings, renderReports } from './pages/finance.js';
@@ -208,6 +208,24 @@ function loginView() {
     }
   }
 
+  // Build the in-app user from a live session, then enter the workspace.
+  // (Uses the session returned by the auth call itself, never a cached one, so
+  // there is no race between the request resolving and the state-change event.)
+  async function applySession(session) {
+    if (!session) return false;
+    FAMI.session = session;
+    const u = session.user;
+    FAMI.user = {
+      id: u.id, email: u.email,
+      full_name: (u.user_metadata && u.user_metadata.full_name) || u.email.split('@')[0],
+      role: (u.user_metadata && u.user_metadata.role) || 'viewer'
+    };
+    try { await api.ensureProfile(); } catch { /* profile table may be missing */ }
+    try { await api.loadProfile(); } catch { /* noop */ }
+    if (!FAMI._pendingPin) startApp();
+    return true;
+  }
+
   async function doAuth() {
     const email = emailInput.value.trim(), password = passInput.value;
     if (!email || password.length < 6) { msg.textContent = 'Enter a valid email and a password of at least 6 characters.'; msg.style.color = 'var(--danger)'; return; }
@@ -219,14 +237,18 @@ function loginView() {
       if (mode === 'signup') {
         // emailRedirectTo points the confirmation email at wherever this app is
         // actually running (preview or production), never a hard-coded localhost.
-        const { error } = await FAMI.client.auth.signUp({ email, password, options: { data: { full_name: nameInput.value.trim(), role: 'viewer' }, emailRedirectTo: location.origin } });
+        const { data, error } = await FAMI.client.auth.signUp({ email, password, options: { data: { full_name: nameInput.value.trim(), role: 'viewer' }, emailRedirectTo: location.origin } });
         if (error) throw error;
-        if (FAMI.mode === 'supabase' && !FAMI.session) {
+        const session = data.session || FAMI.session;
+        // Email confirmation enabled -> the account needs confirming first.
+        if (FAMI.mode === 'supabase' && !session) {
           msg.style.color = 'var(--success)';
-          msg.textContent = 'Account created! Check your email to confirm, then sign in.';
+          msg.textContent = 'Account created! Check your email to confirm your address, then sign in.';
           mode = 'login'; tabs.children[0].click();
           return;
         }
+        // Confirmation disabled (or demo) -> the session is live, enter directly.
+        await applySession(session);
       } else {
         // PIN-gated modes (admin / manager): hold startApp() until the PIN is
         // verified against the account's PIN (default 82000 admin / 83000 manager,
@@ -241,17 +263,10 @@ function loginView() {
           }
           FAMI._pendingPin = true;
         }
-        const { error } = await FAMI.client.auth.signInWithPassword({ email, password });
+        const { data, error } = await FAMI.client.auth.signInWithPassword({ email, password });
         if (error) { FAMI._pendingPin = false; throw error; }
+        await applySession(data.session || FAMI.session);
         if (FAMI._pendingPin) {
-          const s = FAMI.session;
-          FAMI.user = {
-            id: s.user.id, email: s.user.email,
-            full_name: (s.user.user_metadata && s.user.user_metadata.full_name) || s.user.email.split('@')[0],
-            role: (s.user.user_metadata && s.user.user_metadata.role) || 'viewer'
-          };
-          try { await api.ensureProfile(); } catch { /* profile table may be missing */ }
-          try { await api.loadProfile(); } catch { /* noop */ }
           // First account on a fresh install becomes the admin automatically, so
           // the PIN gate below can accept the admin PIN (82000) instead of locking
           // everyone out because no admin exists to promote anyone yet.
@@ -266,12 +281,14 @@ function loginView() {
             return;
           }
           startApp();
-          return;
         }
       }
     } catch (e) {
       msg.style.color = 'var(--danger)';
-      msg.textContent = e.message || 'Authentication failed.';
+      const m = e.message || 'Authentication failed.';
+      msg.textContent = /not confirmed|confirm your email/i.test(m)
+        ? 'Please confirm your email first — check your inbox (and spam folder), then sign in.'
+        : m;
     } finally { submitBtn.disabled = false; }
   }
 

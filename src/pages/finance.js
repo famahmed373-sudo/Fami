@@ -1,5 +1,5 @@
 // ============ FAMI finance pages: expenses, savings, reports ============
-import * as api from '../api.js';
+import * as api from '../supabase.js';
 import {
   el, esc, fmtMoney, fmtNum, fmtDate, pct, today, monthKey, monthLabel, monthShift,
   toast, badge, emptyState, confirmDialog, downloadCSV, iconSvg, openModal, closeModal, can
