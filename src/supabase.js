@@ -138,7 +138,10 @@ export async function ensureProfile() {
   if (!user) return;
   const { data } = await sb().from('profiles').select('*').eq('id', user.id).single();
   if (data) { FAMI.user = { ...data }; return; }
-  // profile missing (trigger not installed) -> create from auth metadata
+  // profile missing (trigger not installed) -> create from auth metadata.
+  // This needs the "profiles insert own" RLS policy; if that is missing the
+  // insert fails loudly so the login flow can explain the problem instead of
+  // silently keeping the signup-time 'viewer' role.
   const meta = (user.user_metadata || {});
   const row = {
     id: user.id,
@@ -146,7 +149,14 @@ export async function ensureProfile() {
     full_name: meta.full_name || user.email.split('@')[0],
     role: meta.role || 'viewer'
   };
-  await sb().from('profiles').insert(row);
+  const { error } = await sb().from('profiles').insert(row);
+  if (error) {
+    console.warn('profile create failed', error && error.message);
+    // Keep the metadata role so the user can still enter as a viewer; admins
+    // can fix the schema (profiles insert policy) and re-promote.
+    FAMI.user = { ...FAMI.user, ...row };
+    return;
+  }
   FAMI.user = row;
 }
 
