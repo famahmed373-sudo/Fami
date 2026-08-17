@@ -25,6 +25,13 @@
       root.innerHTML = '<div style="position:fixed;inset:0;background:#0a101d;color:#fbbf24;font:13px/1.6 ui-monospace,monospace;padding:26px;overflow:auto;white-space:pre-wrap"><b style="font-size:15px">Fahmi failed to start (async error)</b><br><br>' + String((e.reason && (e.reason.stack || e.reason.message)) || e.reason) + '</div>';
     }
   });
+  // Live Supabase credentials (publishable/anon — safe for the client). The app reads
+  // these before env vars, so builds with stale bundles still connect to Supabase.
+  window.__FAMI_SUPABASE__ = {
+    url: 'https://ovixuisgcqukjxserwwc.supabase.co',
+    publishableKey: 'sb_publishable_XIh14wVwGnS2m82gXJgEfQ_-FAC9Jrt',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aXh1aXNnY3F1a2p4c2Vyd3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MTY4NDksImV4cCI6MjEwMjM5Mjg0OX0.7f0ekUVzNkE8sRNzDFNw8NcN1lLklWrDp4QdHhI9Y3w'
+  };
 </script>
 <script type="module" src="/src/app.js"></script>
 </body>

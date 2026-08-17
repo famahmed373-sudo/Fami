@@ -13,9 +13,11 @@ const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_XIh14wVwGnS2m82gXJgEfQ
 const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aXh1aXNnY3F1a2p4c2Vyd3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MTY4NDksImV4cCI6MjEwMjM5Mjg0OX0.7f0ekUVzNkE8sRNzDFNw8NcN1lLklWrDp4QdHhI9Y3w';
 
 export function initClient() {
-  const url = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
-  // Prefer the modern publishable key, then the anon key (env or fallback).
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_ANON_KEY;
+  // Inline config in index.html wins (survives stale bundles), then build env, then constants.
+  const cfg = (typeof window !== 'undefined' && window.__FAMI_SUPABASE__) || {};
+  const url = cfg.url || import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  // Prefer the modern publishable key, then the anon key (inline, env, or fallback).
+  const key = cfg.publishableKey || cfg.anonKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_ANON_KEY;
   FAMI.prefs = loadPrefs();
   if (url && key && url.startsWith('http')) {
     FAMI.mode = 'supabase';
